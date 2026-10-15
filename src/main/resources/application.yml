@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: Senla_testTask_Binance
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/binance}
+    username: ${SPRING_DATASOURCE_USERNAME:binance}
+    password: ${SPRING_DATASOURCE_PASSWORD:binance}
+  jpa:
+    open-in-view: false
+
+binance:
+  base-url: ${BINANCE_BASE_URL:https://api.binance.com}
+  symbol: ${BINANCE_SYMBOL:BNBUSDT}
+  poll-interval: ${BINANCE_POLL_INTERVAL:PT30S}
