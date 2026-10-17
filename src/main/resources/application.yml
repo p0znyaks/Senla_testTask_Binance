@@ -14,3 +14,5 @@ binance:
   base-url: ${BINANCE_BASE_URL:https://api.binance.com}
   symbol: ${BINANCE_SYMBOL:BNBUSDT}
   poll-interval: ${BINANCE_POLL_INTERVAL:PT30S}
+  connect-timeout: ${BINANCE_CONNECT_TIMEOUT:5s}
+  read-timeout: ${BINANCE_READ_TIMEOUT:10s}
