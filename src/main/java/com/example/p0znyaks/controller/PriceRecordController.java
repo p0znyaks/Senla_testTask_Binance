@@ -1,23 +1,25 @@
 package com.example.p0znyaks.controller;
 
+import com.example.p0znyaks.config.BinanceProperties;
 import com.example.p0znyaks.dto.AveragePriceResponse;
 import com.example.p0znyaks.dto.PricePageResponse;
+import com.example.p0znyaks.dto.PriceRangeRequest;
 import com.example.p0znyaks.dto.PriceRecordResponse;
 import com.example.p0znyaks.dto.TrendResponse;
-import com.example.p0znyaks.config.BinanceProperties;
-import com.example.p0znyaks.entity.PriceRecord;
 import com.example.p0znyaks.service.PriceQueryService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
-import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.Instant;
-
 @RestController
 @RequestMapping("/api/v1/prices")
+@Validated
 @RequiredArgsConstructor
 public class PriceRecordController {
 
@@ -26,30 +28,23 @@ public class PriceRecordController {
 
     @GetMapping("/latest")
     public PriceRecordResponse getLatest() {
-        PriceRecord latest = priceQueryService.findLatestOrThrow();
-        return new PriceRecordResponse(latest.getSymbol(), latest.getPrice(), latest.getFetchedAt());
+        return priceQueryService.getLatest(binanceProperties.getSymbol());
     }
 
     @GetMapping("/average")
-    public AveragePriceResponse getAverage(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
-        return priceQueryService.calculateAverage(binanceProperties.getSymbol(), from, to);
+    public AveragePriceResponse getAverage(@Valid PriceRangeRequest range) {
+        return priceQueryService.calculateAverage(binanceProperties.getSymbol(), range.from(), range.to());
     }
 
     @GetMapping
-    public PricePageResponse getPage(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return priceQueryService.getPage(binanceProperties.getSymbol(), from, to, page, size);
+    public PricePageResponse getPage(@Valid PriceRangeRequest range,
+                                     @RequestParam(defaultValue = "0") @Min(0) int page,
+                                     @RequestParam(defaultValue = "20") @Min(1) @Max(200) int size) {
+        return priceQueryService.getPage(binanceProperties.getSymbol(), range.from(), range.to(), page, size);
     }
 
     @GetMapping("/trend")
-    public TrendResponse getTrend(
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to) {
-        return priceQueryService.calculateTrend(binanceProperties.getSymbol(), from, to);
+    public TrendResponse getTrend(@Valid PriceRangeRequest range) {
+        return priceQueryService.calculateTrend(binanceProperties.getSymbol(), range.from(), range.to());
     }
 }

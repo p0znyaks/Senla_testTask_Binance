@@ -1,8 +1,8 @@
 package com.example.p0znyaks.exception;
 
-import lombok.Getter;
-
-@Getter
+/**
+ * Thrown when the service has no price records for the requested symbol or range.
+ */
 public class PriceNotFoundException extends RuntimeException {
     public PriceNotFoundException(String message) {
         super(message);

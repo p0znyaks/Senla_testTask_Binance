@@ -1,13 +1,13 @@
 package com.example.p0znyaks.service;
 
 import com.example.p0znyaks.dto.AveragePriceResponse;
-import com.example.p0znyaks.dto.PriceItemResponse;
 import com.example.p0znyaks.dto.PricePageResponse;
+import com.example.p0znyaks.dto.PriceRecordResponse;
 import com.example.p0znyaks.dto.TrendResponse;
 import com.example.p0znyaks.entity.PriceRecord;
+import com.example.p0znyaks.exception.InvalidRangeException;
 import com.example.p0znyaks.exception.PriceNotFoundException;
 import com.example.p0znyaks.repository.PriceRecordRepository;
-import jakarta.annotation.Nonnull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -32,33 +32,32 @@ public class PriceQueryService {
     private final PriceRecordRepository priceRecordRepository;
 
     @Transactional(readOnly = true)
-    public PriceRecord findLatestOrThrow() {
-        PriceRecord latest = priceRecordRepository.findTopByOrderByFetchedAtDesc();
+    public PriceRecordResponse getLatest(String symbol) {
+        PriceRecord latest = priceRecordRepository.findTopBySymbolOrderByFetchedAtDesc(symbol);
         if (latest == null) {
-            throw new PriceNotFoundException("No price records available");
+            throw new PriceNotFoundException("No price records available for " + symbol);
         }
-        return latest;
+        return PriceRecordResponse.from(latest);
     }
 
     @Transactional(readOnly = true)
     public AveragePriceResponse calculateAverage(String symbol, Instant from, Instant to) {
-        List<PriceRecord> records = priceRecordRepository.findBySymbolAndFetchedAtBetween(symbol, from, to);
-        if (records.isEmpty()) {
-            return new AveragePriceResponse(BigDecimal.ZERO);
+        validateRange(from, to);
+        BigDecimal average = priceRecordRepository.findAveragePrice(symbol, from, to);
+        if (average == null) {
+            throw new PriceNotFoundException(
+                    "No records for symbol %s in range [%s, %s]".formatted(symbol, from, to));
         }
-        BigDecimal sum = records.stream()
-                .map(PriceRecord::getPrice)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal average = sum.divide(BigDecimal.valueOf(records.size()), AVERAGE_SCALE, RoundingMode.HALF_UP);
-        return new AveragePriceResponse(average);
+        return new AveragePriceResponse(average.setScale(AVERAGE_SCALE, RoundingMode.HALF_UP));
     }
 
     @Transactional(readOnly = true)
     public PricePageResponse getPage(String symbol, Instant from, Instant to, int page, int size) {
+        validateRange(from, to);
         PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "fetchedAt"));
         Page<PriceRecord> pageData = priceRecordRepository.findBySymbolAndFetchedAtBetween(symbol, from, to, pageable);
-        List<PriceItemResponse> items = pageData.getContent().stream()
-                .map(r -> new PriceItemResponse(r.getSymbol(), r.getPrice(), r.getFetchedAt()))
+        List<PriceRecordResponse> items = pageData.getContent().stream()
+                .map(PriceRecordResponse::from)
                 .toList();
         return new PricePageResponse(items, pageData.getNumber(), pageData.getSize(),
                 pageData.getTotalElements(), pageData.hasNext());
@@ -66,35 +65,40 @@ public class PriceQueryService {
 
     @Transactional(readOnly = true)
     public TrendResponse calculateTrend(String symbol, Instant from, Instant to) {
-        List<PriceRecord> records = priceRecordRepository
-                .findBySymbolAndFetchedAtBetweenOrderByFetchedAtAsc(symbol, from, to);
-        if (records.isEmpty()) {
+        validateRange(from, to);
+        PriceRecord first = priceRecordRepository
+                .findTopBySymbolAndFetchedAtBetweenOrderByFetchedAtAsc(symbol, from, to);
+        PriceRecord last = priceRecordRepository
+                .findTopBySymbolAndFetchedAtBetweenOrderByFetchedAtDesc(symbol, from, to);
+        if (first == null || last == null) {
             throw new PriceNotFoundException(
                     "No records for symbol %s in range [%s, %s]".formatted(symbol, from, to));
         }
-        String trend = getString(records);
         return new TrendResponse(symbol,
                 LocalDate.ofInstant(from, ZoneOffset.UTC),
                 LocalDate.ofInstant(to, ZoneOffset.UTC),
-                trend);
+                resolveTrend(first.getPrice(), last.getPrice()));
     }
 
-    @Nonnull
-    private static String getString(List<PriceRecord> records) {
-        BigDecimal startPrice = records.get(0).getPrice();
-        BigDecimal endPrice = records.get(records.size() - 1).getPrice();
+    /**
+     * A range must start before it ends, otherwise the query would match nothing.
+     */
+    private static void validateRange(Instant from, Instant to) {
+        if (from.isAfter(to)) {
+            throw new InvalidRangeException("`from` must not be after `to`");
+        }
+    }
+
+    private static String resolveTrend(BigDecimal startPrice, BigDecimal endPrice) {
         BigDecimal diff = endPrice.subtract(startPrice);
         BigDecimal relative = startPrice.compareTo(BigDecimal.ZERO) == 0
                 ? BigDecimal.ZERO
                 : diff.abs().divide(startPrice, 6, RoundingMode.HALF_UP);
-        String trend;
         if (relative.compareTo(FLAT_THRESHOLD) < 0) {
-            trend = TrendResponse.TREND_FLAT;
-        } else if (diff.compareTo(BigDecimal.ZERO) > 0) {
-            trend = TrendResponse.TREND_UPWARD;
-        } else {
-            trend = TrendResponse.TREND_DOWNWARD;
+            return TrendResponse.TREND_FLAT;
         }
-        return trend;
+        return diff.compareTo(BigDecimal.ZERO) > 0
+                ? TrendResponse.TREND_UPWARD
+                : TrendResponse.TREND_DOWNWARD;
     }
 }
