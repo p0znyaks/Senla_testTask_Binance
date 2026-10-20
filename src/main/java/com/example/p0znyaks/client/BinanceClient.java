@@ -1,13 +1,13 @@
 package com.example.p0znyaks.client;
 
-import com.example.p0znyaks.dto.AvgPriceResponse;
+import com.example.p0znyaks.dto.binance.AvgPriceResponse;
+import com.example.p0znyaks.dto.binance.BinanceErrorResponse;
 import com.example.p0znyaks.exception.BinanceApiException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClient.RequestHeadersSpec.ConvertibleClientHttpResponse;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -17,7 +17,7 @@ import java.nio.charset.StandardCharsets;
 public class BinanceClient {
 
     private static final String AVG_PRICE_PATH = "/api/v3/avgPrice";
-    private static final int NO_BINANCE_CODE = -1;
+    private static final String RETRY_AFTER_HEADER = "Retry-After";
 
     private final RestClient binanceRestClient;
     private final ObjectMapper objectMapper;
@@ -28,30 +28,63 @@ public class BinanceClient {
                         .path(AVG_PRICE_PATH)
                         .queryParam("symbol", symbol)
                         .build())
-                .retrieve()
-                .onStatus(status -> status.isError(), (request, response) -> {
-                    throw toBinanceApiException(response);
-                })
-                .body(AvgPriceResponse.class);
+                .exchange((request, response) -> {
+                    int statusCode = response.getStatusCode().value();
+                    byte[] body = readBody(response, statusCode);
+                    if (response.getStatusCode().is2xxSuccessful()) {
+                        return deserialize(body, AvgPriceResponse.class, statusCode);
+                    }
+                    throw toBinanceApiException(response, statusCode, body);
+                });
     }
 
-    private BinanceApiException toBinanceApiException(ClientHttpResponse response) throws IOException {
-        int statusCode = response.getStatusCode().value();
-        Long retryAfterSeconds = parseRetryAfter(response.getHeaders().getFirst("Retry-After"));
-        String body = new String(response.getBody().readAllBytes(), StandardCharsets.UTF_8);
-        int code = NO_BINANCE_CODE;
-        String msg = body;
+    private <T> T deserialize(byte[] body, Class<T> type, int statusCode) {
         try {
-            JsonNode json = objectMapper.readTree(body);
-            code = json.path("code").asInt(NO_BINANCE_CODE);
-            msg = json.path("msg").asText(body);
-        } catch (Exception ignored) {
+            return objectMapper.readValue(body, type);
+        } catch (IOException e) {
+            throw new BinanceApiException(
+                    "Could not parse Binance response: " + e.getMessage(),
+                    statusCode, BinanceErrorResponse.UNKNOWN_CODE, null);
         }
-        return new BinanceApiException("Binance API error: " + msg, statusCode, code, retryAfterSeconds);
+    }
+
+    private BinanceApiException toBinanceApiException(ConvertibleClientHttpResponse response,
+                                                     int statusCode,
+                                                     byte[] body) {
+        Long retryAfterSeconds = parseRetryAfter(response.getHeaders().getFirst(RETRY_AFTER_HEADER));
+        BinanceErrorResponse error = parseError(body);
+        return new BinanceApiException(
+                "Binance API error: " + error.msg(),
+                statusCode,
+                error.codeOrUnknown(),
+                retryAfterSeconds);
+    }
+
+    private BinanceErrorResponse parseError(byte[] body) {
+        String rawBody = new String(body, StandardCharsets.UTF_8);
+        if (rawBody.isBlank()) {
+            return new BinanceErrorResponse(null, "empty response body");
+        }
+        try {
+            BinanceErrorResponse parsed = objectMapper.readValue(rawBody, BinanceErrorResponse.class);
+            return new BinanceErrorResponse(parsed.code(), parsed.msg() != null ? parsed.msg() : rawBody);
+        } catch (IOException e) {
+            return new BinanceErrorResponse(null, rawBody);
+        }
+    }
+
+    private byte[] readBody(ConvertibleClientHttpResponse response, int statusCode) {
+        try {
+            return response.getBody().readAllBytes();
+        } catch (IOException e) {
+            throw new BinanceApiException(
+                    "Could not read Binance response body: " + e.getMessage(),
+                    statusCode, BinanceErrorResponse.UNKNOWN_CODE, null);
+        }
     }
 
     private Long parseRetryAfter(String header) {
-        if (header == null) {
+        if (header == null || header.isBlank()) {
             return null;
         }
         try {

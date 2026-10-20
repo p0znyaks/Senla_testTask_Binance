@@ -1,12 +1,17 @@
 services:
   db:
-    image: postgres:17-alpine
+    image: ${POSTGRES_IMAGE:-postgres:17-alpine}
+    restart: unless-stopped
+    # All database settings come from the .env file in the project root.
+    env_file:
+      - path: .env
+        required: false
     environment:
-      POSTGRES_USER: ${SPRING_DATASOURCE_USERNAME}
-      POSTGRES_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
-      POSTGRES_DB: binance
+      POSTGRES_USER: ${POSTGRES_USER:-binance}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-binance}
+      POSTGRES_DB: ${POSTGRES_DB:-binance}
     ports:
-      - "5433:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -15,5 +20,30 @@ services:
       timeout: 3s
       retries: 10
 
+  app:
+    build: .
+    restart: unless-stopped
+    # All application settings come from the .env file in the project root.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Inside the compose network the database is reachable by service name.
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL_DOCKER:-jdbc:postgresql://db:5432/binance}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-${POSTGRES_USER:-binance}}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-${POSTGRES_PASSWORD:-binance}}
+    ports:
+      - "${APP_PORT:-8080}:${APP_PORT:-8080}"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:${APP_PORT:-8080}/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
 volumes:
   pgdata:
+
