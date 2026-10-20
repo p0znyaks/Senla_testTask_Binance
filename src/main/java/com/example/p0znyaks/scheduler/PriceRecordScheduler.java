@@ -20,10 +20,6 @@ public class PriceRecordScheduler {
 
     private final PriceFetchService priceFetchService;
 
-    /**
-     * Earliest moment the next poll may hit Binance again. Set when Binance answers
-     * "too many requests" and tells us for how long to wait.
-     */
     private volatile Instant nextAllowedPollAt = Instant.EPOCH;
 
     @Scheduled(fixedDelayString = "${binance.poll-interval}")

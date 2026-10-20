@@ -12,13 +12,6 @@ import org.springframework.web.client.RestClient.RequestHeadersSpec.ConvertibleC
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
-/**
- * Thin HTTP client for the Binance public API.
- *
- * <p>Every failure is translated into a {@link BinanceApiException} that carries the HTTP
- * status, the Binance error code and the {@code Retry-After} hint, so the scheduler can
- * react to rate limiting without knowing anything about HTTP.
- */
 @Component
 @RequiredArgsConstructor
 public class BinanceClient {
@@ -29,11 +22,6 @@ public class BinanceClient {
     private final RestClient binanceRestClient;
     private final ObjectMapper objectMapper;
 
-    /**
-     * Fetches the average price of the given symbol.
-     *
-     * @throws BinanceApiException if Binance answers with an error status or an unreadable body
-     */
     public AvgPriceResponse fetchAvgPrice(String symbol) {
         return binanceRestClient.get()
                 .uri(uriBuilder -> uriBuilder
@@ -41,8 +29,6 @@ public class BinanceClient {
                         .queryParam("symbol", symbol)
                         .build())
                 .exchange((request, response) -> {
-                    // The body is read exactly once and reused for both the success
-                    // and the error branch: a stream cannot be read twice.
                     int statusCode = response.getStatusCode().value();
                     byte[] body = readBody(response, statusCode);
                     if (response.getStatusCode().is2xxSuccessful()) {
@@ -74,10 +60,6 @@ public class BinanceClient {
                 retryAfterSeconds);
     }
 
-    /**
-     * Parses the Binance error payload. A body that is missing or not a JSON object is not
-     * an error by itself: the raw text is used as the message and the code stays unknown.
-     */
     private BinanceErrorResponse parseError(byte[] body) {
         String rawBody = new String(body, StandardCharsets.UTF_8);
         if (rawBody.isBlank()) {
@@ -101,9 +83,6 @@ public class BinanceClient {
         }
     }
 
-    /**
-     * @return the number of seconds to wait, or {@code null} if the header is absent or not a number
-     */
     private Long parseRetryAfter(String header) {
         if (header == null || header.isBlank()) {
             return null;

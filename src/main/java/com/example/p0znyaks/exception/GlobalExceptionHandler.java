@@ -19,9 +19,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
-/**
- * Translates every exception into the same JSON error shape: {@code {"error": "<message>"}}.
- */
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -31,18 +28,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(body(ex.getMessage()));
     }
 
-    /**
-     * Binding errors raised while constructing a request object, for example a missing
-     * {@code from}/{@code to} parameter, surface as a plain {@link BindException}.
-     */
     @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class})
     public ResponseEntity<Map<String, Object>> handleBinding(BindException ex) {
         return ResponseEntity.badRequest().body(body(describe(ex.getBindingResult())));
     }
 
-    /**
-     * Constraint violations on plain method parameters, for example a negative {@code page}.
-     */
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<Map<String, Object>> handleConstraintViolation(ConstraintViolationException ex) {
         String message = ex.getConstraintViolations().stream()
@@ -76,20 +66,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(body(ex.getMessage()));
     }
 
-    /**
-     * Any other unexpected failure is reported with the same error body shape,
-     * so clients never have to parse a framework-specific error page.
-     */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleUnexpected(Exception ex) {
         log.error("Unexpected error while handling request", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body("Internal server error"));
     }
 
-    /**
-     * Builds a readable message from the first binding error, preferring a field error
-     * over a global one because it names the offending parameter.
-     */
     private static String describe(BindingResult bindingResult) {
         return bindingResult.getFieldErrors().stream()
                 .findFirst()

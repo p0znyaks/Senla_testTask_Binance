@@ -5,9 +5,6 @@ import org.springframework.format.annotation.DateTimeFormat;
 
 import java.time.Instant;
 
-/**
- * Request parameters describing a closed time interval {@code [from, to]}.
- */
 public record PriceRangeRequest(
         @NotNull
         @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)

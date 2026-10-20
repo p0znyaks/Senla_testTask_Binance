@@ -80,9 +80,6 @@ public class PriceQueryService {
                 resolveTrend(first.getPrice(), last.getPrice()));
     }
 
-    /**
-     * A range must start before it ends, otherwise the query would match nothing.
-     */
     private static void validateRange(Instant from, Instant to) {
         if (from.isAfter(to)) {
             throw new InvalidRangeException("`from` must not be after `to`");
