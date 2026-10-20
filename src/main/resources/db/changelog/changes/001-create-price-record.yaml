@@ -1,0 +1,50 @@
+databaseChangeLog:
+  - changeSet:
+      id: create-price-record
+      author: p0znyaks
+      changes:
+        - createTable:
+            tableName: price_record
+            columns:
+              - column:
+                  name: id
+                  type: bigserial
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_price_record
+                    nullable: false
+              - column:
+                  name: symbol
+                  type: varchar(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: price
+                  type: numeric(20,10)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: fetched_at
+                  type: timestamptz
+                  constraints:
+                    nullable: false
+              - column:
+                  name: close_time
+                  type: bigint
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: price_record
+            constraintName: uq_price_record_symbol_close_time
+            columnNames: symbol, close_time
+        - createIndex:
+            tableName: price_record
+            indexName: idx_price_record_symbol_fetched_at
+            columns:
+              - column:
+                  name: symbol
+              - column:
+                  name: fetched_at
+      rollback:
+        - dropTable:
+            tableName: price_record

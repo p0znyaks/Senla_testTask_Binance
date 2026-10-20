@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: ${SPRING_APPLICATION_NAME:Senla_testTask_Binance}
+  config:
+    # Single source of truth: the .env file in the project root.
+    # Every value below is read from it; the fallback is only used when .env is absent.
+    import: optional:file:.env[.properties]
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/binance}
+    username: ${SPRING_DATASOURCE_USERNAME:binance}
+    password: ${SPRING_DATASOURCE_PASSWORD:binance}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+server:
+  port: ${APP_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+binance:
+  base-url: ${BINANCE_BASE_URL:https://api.binance.com}
+  symbol: ${BINANCE_SYMBOL:BNBUSDT}
+  poll-interval: ${BINANCE_POLL_INTERVAL:PT30S}
+  connect-timeout: ${BINANCE_CONNECT_TIMEOUT:5s}
+  read-timeout: ${BINANCE_READ_TIMEOUT:10s}
+  scheduler:
+    enabled: ${BINANCE_SCHEDULER_ENABLED:true}
